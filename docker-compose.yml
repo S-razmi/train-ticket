@@ -1,5 +1,3 @@
-version: "3"
-
 services:
   #  rabbitmq:
   #    image: rabbitmq:management
@@ -236,15 +234,6 @@ services:
       networks:
           - my-network
 
-  ts-ticketinfo-service:
-        build: ts-ticketinfo-service
-        image: ${IMG_REPO}/ts-ticketinfo-service:${IMG_TAG}
-        restart: always
-        ports:
-          - 15681:15681
-        networks:
-          - my-network
-
   ts-price-service:
         build: ts-price-service
         image: ${IMG_REPO}/ts-price-service:${IMG_TAG}
@@ -375,12 +364,30 @@ services:
         networks:
           - my-network
 
+  ts-ticket-office-mysql:
+    image: mysql:5.7
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ts-ticket-office
+    networks:
+      - my-network
+
   ts-ticket-office-service:
         build: ts-ticket-office-service
         image: ${IMG_REPO}/ts-ticket-office-service:${IMG_TAG}
         restart: always
         ports:
           - 16108:16108
+        depends_on:
+          - ts-ticket-office-mysql
+        environment:
+          TICKET_OFFICE_MYSQL_HOST: ts-ticket-office-mysql
+          TICKET_OFFICE_MYSQL_PORT: 3306
+          TICKET_OFFICE_MYSQL_USER: root
+          TICKET_OFFICE_MYSQL_PASSWORD: root
+          TICKET_OFFICE_MYSQL_DATABASE: ts-ticket-office
         networks:
           - my-network
 
@@ -408,7 +415,8 @@ services:
     expose:
       - "3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-voucher-mysql
     networks:
       - my-network
 
@@ -425,19 +433,49 @@ services:
           networks:
             - my-network
 
-  ts-food-map-service:
-        build: ts-food-map-service
-        image: ${IMG_REPO}/ts-food-map-service:${IMG_TAG}
+  ts-station-food-mysql:
+    image: mysql
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts
+    networks:
+      - my-network
+
+  ts-station-food-service:
+        build: ts-station-food-service
+        image: ${IMG_REPO}/ts-station-food-service:${IMG_TAG}
         restart: always
         ports:
           - 18855:18855
+        depends_on:
+          - ts-station-food-mysql
+        environment:
+          STATION_FOOD_MYSQL_HOST: ts-station-food-mysql
         networks:
           - my-network
 
-  ts-food-map-mongo:
-    image: mongo
+  ts-train-food-mysql:
+    image: mysql
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ts-train-food-mysql
     networks:
       - my-network
+
+  ts-train-food-service:
+        build: ts-train-food-service
+        image: ${IMG_REPO}/ts-train-food-service:${IMG_TAG}
+        restart: always
+        ports:
+          - 19999:19999
+        depends_on:
+          - ts-train-food-mysql
+        networks:
+          - my-network
 
   ts-route-plan-service:
           build: ts-route-plan-service
@@ -548,10 +586,20 @@ services:
       - my-network
 
   ts-avatar-service:
-    image: ${NAMESPACE}/ts-avatar-service:${TAG}
+    build: ts-avatar-service
+    image: ${IMG_REPO}/ts-avatar-service:${IMG_TAG}
     restart: always
     ports:
       - 17001:17001
+    networks:
+      - my-network
+
+  ts-gateway-service:
+    build: ts-gateway-service
+    image: ${IMG_REPO}/ts-gateway-service:${IMG_TAG}
+    restart: always
+    ports:
+      - 18889:18888
     networks:
       - my-network
 

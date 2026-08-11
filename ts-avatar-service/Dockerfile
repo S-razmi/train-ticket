@@ -1,10 +1,10 @@
-FROM python:3
+FROM python:3.8
 
 RUN /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo 'Asia/Shanghai' >/etc/timezone
 
 RUN apt update -y
 RUN apt install -y cmake
-RUN apt install -y libgl1-mesa-glx
+RUN apt install -y libgl1
 
 ENV PYTHONUNBUFFERED=TRUE
 
