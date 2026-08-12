@@ -30,6 +30,17 @@ services:
     networks:
       - my-network
 
+  nacos:
+    image: nacos/nacos-server:v2.0.3
+    environment:
+      MODE: standalone
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+    ports:
+      - 8848:8848
+    networks:
+      - my-network
+
   ts-ui-dashboard:
     build: ts-ui-dashboard
     image: ${IMG_REPO}/ts-ui-dashboard:${IMG_TAG}
@@ -45,6 +56,22 @@ services:
     restart: always
     ports:
       - 12340:12340
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-auth-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-auth-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-auth-mysql
     networks:
       - my-network
 
@@ -59,6 +86,22 @@ services:
     restart: always
     ports:
       - 12342:12342
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-user-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-user-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-user-mysql
     networks:
       - my-network
 
@@ -73,6 +116,10 @@ services:
     restart: always
     ports:
       - 15678:15678
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - nacos
     networks:
       - my-network
 
@@ -87,6 +134,23 @@ services:
     restart: always
     ports:
       - 11178:11178
+    environment:
+      ROUTE_MYSQL_HOST: ts-route-mysql
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-route-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-route-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts
     networks:
       - my-network
 
@@ -101,6 +165,22 @@ services:
     restart: always
     ports:
       - 12347:12347
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-contacts-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-contacts-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-contacts-mysql
     networks:
       - my-network
 
@@ -115,6 +195,23 @@ services:
     restart: always
     ports:
       - 12031:12031
+    environment:
+      ORDER_MYSQL_HOST: ts-order-mysql
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-order-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-order-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts
     networks:
       - my-network
 
@@ -129,6 +226,22 @@ services:
     restart: always
     ports:
       - 12032:12032
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-order-other-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-order-other-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-order-other-mysql
     networks:
       - my-network
 
@@ -143,6 +256,22 @@ services:
     restart: always
     ports:
       - 15679:15679
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-config-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-config-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-config-mysql
     networks:
       - my-network
 
@@ -157,6 +286,22 @@ services:
     restart: always
     ports:
       - 12345:12345
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-station-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-station-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-station-mysql
     networks:
       - my-network
 
@@ -171,6 +316,22 @@ services:
     restart: always
     ports:
       - 14567:14567
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-train-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-train-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: s-train-mysql
     networks:
       - my-network
 
@@ -185,6 +346,22 @@ services:
     restart: always
     ports:
       - 12346:12346
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - ts-travel-mysql
+      - nacos
+    networks:
+      - my-network
+
+  ts-travel-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-travel-mysql
     networks:
       - my-network
 
@@ -199,8 +376,24 @@ services:
       restart: always
       ports:
         - 16346:16346
+      environment:
+        NACOS_ADDRS: nacos:8848
+      depends_on:
+        - ts-travel2-mysql
+        - nacos
       networks:
         - my-network
+
+  ts-travel2-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-travel2-mysql
+    networks:
+      - my-network
 
   ts-travel2-mongo:
     image: mongo
@@ -213,6 +406,10 @@ services:
     restart: always
     ports:
       - 14568:14568
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - nacos
     networks:
       - my-network
 
@@ -222,6 +419,10 @@ services:
     restart: always
     ports:
       - 14569:14569
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - nacos
     networks:
       - my-network
 
@@ -231,6 +432,10 @@ services:
       restart: always
       ports:
         - 15680:15680
+      environment:
+        NACOS_ADDRS: nacos:8848
+      depends_on:
+        - nacos
       networks:
           - my-network
 
@@ -240,9 +445,25 @@ services:
         restart: always
         ports:
           - 16579:16579
+        environment:
+          PRICE_MYSQL_HOST: ts-price-mysql
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - ts-price-mysql
+          - nacos
         networks:
           - my-network
 
+  ts-price-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts
+    networks:
+      - my-network
 
   ts-price-mongo:
     image: mongo
@@ -255,8 +476,24 @@ services:
         restart: always
         ports:
           - 17853:17853
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - ts-notification-mysql
+          - nacos
         networks:
           - my-network
+
+  ts-notification-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-notification-mysql
+    networks:
+      - my-network
 
   ts-security-service:
         build: ts-security-service
@@ -264,8 +501,24 @@ services:
         restart: always
         ports:
           - 11188:11188
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - ts-security-mysql
+          - nacos
         networks:
           - my-network
+
+  ts-security-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-security-mysql
+    networks:
+      - my-network
 
   ts-security-mongo:
     image: mongo
@@ -278,8 +531,24 @@ services:
         restart: always
         ports:
           - 18673:18673
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - ts-inside-payment-mysql
+          - nacos
         networks:
           - my-network
+
+  ts-inside-payment-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-inside-payment-mysql
+    networks:
+      - my-network
 
   ts-inside-payment-mongo:
     image: mongo
@@ -292,6 +561,10 @@ services:
         restart: always
         ports:
           - 12386:12386
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - nacos
         networks:
           - my-network
 
@@ -301,8 +574,24 @@ services:
         restart: always
         ports:
           - 19001:19001
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - ts-payment-mysql
+          - nacos
         networks:
           - my-network
+
+  ts-payment-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-payment-mysql
+    networks:
+      - my-network
 
   ts-payment-mongo:
     image: mongo
@@ -315,6 +604,10 @@ services:
         restart: always
         ports:
           - 18886:18886
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - nacos
         networks:
           - my-network
 
@@ -329,6 +622,10 @@ services:
         restart: always
         ports:
           - 18885:18885
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - nacos
         networks:
           - my-network
 
@@ -338,8 +635,24 @@ services:
         restart: always
         ports:
           - 18888:18888
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - ts-assurance-mysql
+          - nacos
         networks:
           - my-network
+
+  ts-assurance-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-assurance-mysql
+    networks:
+      - my-network
 
   ts-assurance-mongo:
     image: mongo
@@ -352,6 +665,10 @@ services:
         restart: always
         ports:
           - 18898:18898
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - nacos
         networks:
           - my-network
 
@@ -361,11 +678,16 @@ services:
         restart: always
         ports:
           - 14322:14322
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - nacos
         networks:
           - my-network
 
   ts-ticket-office-mysql:
     image: mysql:5.7
+    command: --innodb-use-native-aio=0
     expose:
       - "3306"
     environment:
@@ -412,6 +734,7 @@ services:
 
   ts-voucher-mysql:
     image: mysql
+    command: --innodb-use-native-aio=0
     expose:
       - "3306"
     environment:
@@ -434,7 +757,8 @@ services:
             - my-network
 
   ts-station-food-mysql:
-    image: mysql
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
     expose:
       - "3306"
     environment:
@@ -450,14 +774,17 @@ services:
         ports:
           - 18855:18855
         depends_on:
+          - nacos
           - ts-station-food-mysql
         environment:
+          NACOS_ADDRS: nacos:8848
           STATION_FOOD_MYSQL_HOST: ts-station-food-mysql
         networks:
           - my-network
 
   ts-train-food-mysql:
-    image: mysql
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
     expose:
       - "3306"
     environment:
@@ -473,7 +800,10 @@ services:
         ports:
           - 19999:19999
         depends_on:
+          - nacos
           - ts-train-food-mysql
+        environment:
+          NACOS_ADDRS: nacos:8848
         networks:
           - my-network
 
@@ -483,6 +813,10 @@ services:
           restart: always
           ports:
             - 14578:14578
+          environment:
+            NACOS_ADDRS: nacos:8848
+          depends_on:
+            - nacos
           networks:
             - my-network
 
@@ -492,8 +826,24 @@ services:
       restart: always
       ports:
         - 18856:18856
+      environment:
+        NACOS_ADDRS: nacos:8848
+      depends_on:
+        - ts-food-mysql
+        - nacos
       networks:
         - my-network
+
+  ts-food-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-food-mysql
+    networks:
+      - my-network
 
   ts-consign-service:
             build: ts-consign-service
@@ -501,8 +851,24 @@ services:
             restart: always
             ports:
               - 16111:16111
+            environment:
+              NACOS_ADDRS: nacos:8848
+            depends_on:
+              - ts-consign-mysql
+              - nacos
             networks:
               - my-network
+
+  ts-consign-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-consign-mysql
+    networks:
+      - my-network
 
   ts-consign-mongo:
     image: mongo
@@ -515,8 +881,24 @@ services:
             restart: always
             ports:
               - 16110:16110
+            environment:
+              NACOS_ADDRS: nacos:8848
+            depends_on:
+              - ts-consign-price-mysql
+              - nacos
             networks:
               - my-network
+
+  ts-consign-price-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-consign-price-mysql
+    networks:
+      - my-network
 
   ts-consign-price-mongo:
     image: mongo
@@ -534,6 +916,10 @@ services:
         restart: always
         ports:
           - 18767:18767
+        environment:
+          NACOS_ADDRS: nacos:8848
+        depends_on:
+          - nacos
         networks:
           - my-network
 
@@ -543,6 +929,10 @@ services:
             restart: always
             ports:
               - 16112:16112
+            environment:
+              NACOS_ADDRS: nacos:8848
+            depends_on:
+              - nacos
             networks:
               - my-network
 
@@ -556,6 +946,10 @@ services:
                 replicas: 1
                 restart_policy:
                   condition: on-failure
+              environment:
+                NACOS_ADDRS: nacos:8848
+              depends_on:
+                - nacos
               networks:
                 - my-network
 
@@ -569,6 +963,10 @@ services:
                   replicas: 1
                   restart_policy:
                     condition: on-failure
+                environment:
+                  NACOS_ADDRS: nacos:8848
+                depends_on:
+                  - nacos
                 networks:
                   - my-network
 
@@ -582,6 +980,10 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - nacos
     networks:
       - my-network
 
@@ -600,6 +1002,10 @@ services:
     restart: always
     ports:
       - 18889:18888
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - nacos
     networks:
       - my-network
 
