@@ -207,3 +207,13 @@ spring:
           uri: lb://${VERIFICATION_CODE_SERVICE_HOST:ts-verification-code-service}
           predicates:
             - Path=/api/v1/verifycode/**
+
+        - id: food-delivery
+          uri: lb://${FOOD_DELIVERY_SERVICE_HOST:ts-food-delivery-service}
+          predicates:
+            - Path=/api/v1/fooddeliveryservice/**
+
+        - id: wait-order
+          uri: lb://${WAIT_ORDER_SERVICE_HOST:ts-wait-order-service}
+          predicates:
+            - Path=/api/v1/waitorderservice/**

@@ -1,11 +1,11 @@
 services:
-  #  rabbitmq:
-  #    image: rabbitmq:management
-  #    ports:
-  #      - 5672:5672
-  #      - 15672:15672
-  #    networks:
-  #      - my-network
+  rabbitmq:
+    image: rabbitmq:management
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - my-network
 
   # kafka:
   #   container_name: kafka
@@ -1006,6 +1006,84 @@ services:
       NACOS_ADDRS: nacos:8848
     depends_on:
       - nacos
+    networks:
+      - my-network
+
+  ts-delivery-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts-delivery-mysql
+    networks:
+      - my-network
+
+  ts-delivery-service:
+    build: ts-delivery-service
+    image: ${IMG_REPO}/ts-delivery-service:${IMG_TAG}
+    restart: always
+    ports:
+      - 18808:18808
+    environment:
+      NACOS_ADDRS: nacos:8848
+      rabbitmq_host: rabbitmq
+    depends_on:
+      - nacos
+      - ts-delivery-mysql
+      - rabbitmq
+    networks:
+      - my-network
+
+  ts-food-delivery-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: ts-food-delivery-mysql
+    networks:
+      - my-network
+
+  ts-food-delivery-service:
+    build: ts-food-delivery-service
+    image: ${IMG_REPO}/ts-food-delivery-service:${IMG_TAG}
+    restart: always
+    ports:
+      - 18957:18957
+    environment:
+      NACOS_ADDRS: nacos:8848
+    depends_on:
+      - nacos
+      - ts-food-delivery-mysql
+    networks:
+      - my-network
+
+  ts-wait-order-mysql:
+    image: mysql:5.7
+    command: --innodb-use-native-aio=0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Abcd1234#"
+      MYSQL_DATABASE: ts
+    networks:
+      - my-network
+
+  ts-wait-order-service:
+    build: ts-wait-order-service
+    image: ${IMG_REPO}/ts-wait-order-service:${IMG_TAG}
+    restart: always
+    ports:
+      - 17525:17525
+    environment:
+      NACOS_ADDRS: nacos:8848
+      WAIT_ORDER_MYSQL_HOST: ts-wait-order-mysql
+    depends_on:
+      - nacos
+      - ts-wait-order-mysql
     networks:
       - my-network
 
