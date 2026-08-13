@@ -2,7 +2,7 @@
 
 Repo=siaraz
 Tag=latest
-Namespace="tt-default"
+Namespace="default"
 DeployArgs=""
 
 

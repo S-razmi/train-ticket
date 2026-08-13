@@ -1,6 +1,6 @@
 import os
 
-PREFIX = "codewisdom"
+PREFIX = "siaraz"
 VERSION = "0.2.0"
 
 base_path = os.getcwd()
@@ -24,17 +24,23 @@ def init_docker_build_paths():
     list_paths = os.listdir(os.getcwd())
     for p in list_paths:
         if os.path.isdir(p):
-            if(p.startswith("ts-")):
-                build_path=base_path + "/" + p
+            if p.startswith("ts-"):
+                build_path = base_path + "/" + p
                 build_paths.append(build_path)
 
 
 def docker_login():
     username = os.getenv("DOCKER_USERNAME")
-    docker_hub_address = os.getenv("DOCKER_HUB_ADDRESS") or "registry.cn-hangzhou.aliyuncs.com"
+    docker_hub_address = (
+        os.getenv("DOCKER_HUB_ADDRESS") or "registry.cn-hangzhou.aliyuncs.com"
+    )
     print(f"[DOCKER HUB LOGIN] login username:{username} address:{docker_hub_address}")
-    print(f"[DOCKER HUB LOGIN] You should input your root password first and then dockerhub password")
-    docker_login = os.system(f"sudo docker login --username={username} {docker_hub_address}")
+    print(
+        f"[DOCKER HUB LOGIN] You should input your root password first and then dockerhub password"
+    )
+    docker_login = os.system(
+        f"sudo docker login --username={username} {docker_hub_address}"
+    )
     if not docker_login:
         print("docker login failed")
 
@@ -46,7 +52,9 @@ def docker_build_and_push():
         os.chdir(build_path)
         files = os.listdir(build_path)
         if "Dockerfile" in files:
-            docker_build = os.system(f"sudo docker build . -t {PREFIX}/{image_name}:{VERSION}")
+            docker_build = os.system(
+                f"sudo docker build . -t {PREFIX}/{image_name}:{VERSION}"
+            )
             if docker_build != 0:
                 print("[FAIL]" + image_name + " build failed.")
             else:
@@ -59,6 +67,5 @@ def docker_build_and_push():
                 print("[SUCCESS]" + image_name + " push success.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

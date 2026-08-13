@@ -77,8 +77,8 @@ mysql:
       cpu: 500m
 
 xenon:
-  image: radondb/xenon
-  tag: 1.1.5-helm
+  image: siaraz/xenon
+  tag: 1.1.5-helm-fixed
   args: []
 
   ## A string to add extra environment variables

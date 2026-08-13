@@ -20,7 +20,7 @@ pipeline {
                         echo "Building images Successful!"
 
                         echo "Pushing images..."
-                        withCredentials([usernamePassword(credentialsId: 'dockerHub-codewisdom', passwordVariable: 'dockerHubPassword', usernameVariable: 'dockerHubUser')]) {
+                        withCredentials([usernamePassword(credentialsId: 'dockerHub-siaraz', passwordVariable: 'dockerHubPassword', usernameVariable: 'dockerHubUser')]) {
                             sh "sudo docker login -u ${dockerHubUser} -p ${dockerHubPassword}"
                             // sh "sudo /bin/bash ./jenkins-ci/image-tag-push.sh"
                         }
