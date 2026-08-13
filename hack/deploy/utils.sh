@@ -25,6 +25,7 @@ rabbitmqRelease="rabbitmq"
 tsUser="ts"
 tsPassword="Ts_123456"
 tsDB="ts"
+tsMysqlName="tsdb"
 
 
 function deploy_infrastructures {
@@ -58,7 +59,6 @@ function deploy_tracing {
 
 function deploy_tt_mysql_all_in_one {
   namespace=$1
-  tsMysqlName="tsdb"
   echo "Start deployment Step <2/3>: mysql cluster of train-ticket services----------------------"
   helm install $tsMysqlName --set mysql.mysqlUser=$tsUser --set mysql.mysqlPassword=$tsPassword --set mysql.mysqlDatabase=$tsDB $mysqlCharts -n $namespace 1>/dev/null
   echo "Waiting for mysql cluster of train-ticket to be ready ......"

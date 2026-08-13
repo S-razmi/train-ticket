@@ -9,6 +9,7 @@ namespace="$1"
 kubectl delete -f deployment/kubernetes-manifests/quickstart-k8s/yamls -n $namespace
 
 helm ls -n $namespace | grep ts- | awk '{print $1}' | xargs helm uninstall -n $namespace
+helm uninstall $tsMysqlName -n $namespace
 
 helm uninstall $rabbitmqRelease -n $namespace
 helm uninstall $nacosRelease -n $namespace
