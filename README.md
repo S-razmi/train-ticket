@@ -22,9 +22,10 @@ setup was incomplete. None of it ran out of the box anymore.
 **This fork fixes all of that.** `docker-compose.yml` and the affected Dockerfiles/configs have been
 repaired so the full application — all 44 services, service discovery, and every service's database —
 builds and runs cleanly on current Docker/MySQL/Python versions, with a working login and booking flow.
-See [What We Fixed](#what-we-fixed) below for the full list of issues and how each was resolved. The
-Kubernetes deployment path documented further down is unchanged from upstream and has not been
-revalidated by this fork.
+The Kubernetes deployment path has also been fixed and verified end-to-end (tested on minikube):
+images now point at this fork's own `siaraz` Docker Hub account instead of the abandoned `codewisdom`
+ones, and several deploy-script bugs that broke a from-scratch deploy have been fixed. See
+[What We Fixed](#what-we-fixed) below for the full list of issues and how each was resolved.
 
 ## Service Architecture Graph
 ![architecture](./image/2.png)
@@ -59,21 +60,35 @@ To stop everything without losing data: `docker compose stop`. To tear down enti
 
 ## Alternative: Kubernetes
 
-> **Not covered by this fork's fixes.** This path deploys the project's original pre-built Docker Hub
-> images (`codewisdom/*:latest`), which are the same multi-year-old images whose staleness this fork
-> exists to fix on the Compose side — so you may hit similar issues here. Use the Docker Compose path
-> above for a known-working setup; this section is preserved for reference.
+This path has now been fixed and verified on a real cluster (tested on minikube) as part of this fork.
+It no longer deploys the project's original abandoned Docker Hub images (`codewisdom/*:latest`) —
+`deploy.yaml.sample` and `sw_deploy.yaml.sample` now point at this fork's own rebuilt images under the
+`siaraz` Docker Hub account, all pinned to a single tag (`0.2.0`) matching what `build_upload_image.py`
+actually pushes. See [What We Fixed](#what-we-fixed) for the specific bugs found and fixed while
+getting this path working.
 
 **Prerequisites:** an existing Kubernetes cluster, [Helm](https://helm.sh/docs/helm/helm_install/),
 and PVC support (e.g. [OpenEBS localPV](https://openebs.io/docs/2.12.x/user-guides/installation)).
 
 ```bash
-git clone --depth=1 https://github.com/FudanSELab/train-ticket.git
+git clone --depth=1 https://github.com/S-razmi/train-ticket.git
 cd train-ticket/
-make deploy                          # or: make deploy Namespace=yourns
+make deploy                          # or: make deploy Namespace=yourns (defaults to "default")
 kubectl get pods                     # wait for Ready
 ```
-Visit **http://[Node-IP]:32677**.
+
+**Visiting the site:**
+- Real cluster: **http://[Node-IP]:32677**
+- minikube: `minikube ip` for the node IP, or just run `minikube service ts-ui-dashboard -n default --url`
+  to get a ready-to-use URL directly (`-n <namespace>` if you deployed elsewhere).
+
+**If you're on minikube and services get stuck in `ImagePullBackOff`:** Docker Hub's anonymous pull
+rate limit (`toomanyrequests`) can get exhausted pulling 46+ images from one node. If you've already
+built the images locally (`python build_upload_image.py`), skip the registry entirely by loading them
+straight into minikube's image cache:
+```bash
+docker images --format "{{.Repository}}:{{.Tag}}" | grep "^siaraz/" | xargs -n1 minikube image load
+```
 
 Other deploy variants (combine freely via `DeployArgs`):
 
@@ -84,7 +99,9 @@ Other deploy variants (combine freely via `DeployArgs`):
 | With SkyWalking tracing | `make deploy DeployArgs="--with-tracing"` |
 | Everything | `make deploy DeployArgs="--all"` |
 
-Tear down: `make reset-deploy` (add `Namespace=yourns` if you deployed to a custom namespace).
+Tear down: `make reset-deploy` (add `Namespace=yourns` if you deployed to a custom namespace). Note
+this doesn't delete the underlying MySQL StatefulSets' PVCs (Helm's intentional default, to avoid
+silent data loss) — if you want a fully clean slate including DB data, delete those PVCs manually.
 
 ## What We Fixed
 
@@ -129,6 +146,28 @@ leftover from copy-pasting `ts-order-service`'s config that never got updated fo
 `/api/v1/waitorderservice/**` prefix — so every endpoint on the service, including ones meant to be
 public, required authentication. Fixed to whitelist its own path (still requiring a role for the
 one write endpoint, `POST /order`).
+
+**Kubernetes path: image tags didn't match what was actually pushed**
+`deploy.yaml.sample`/`sw_deploy.yaml.sample` still carried the original per-service version tags
+(`1.0.0`, `1.0.1`, etc.) from the abandoned `codewisdom` images, while this fork's build/push flow
+(`.env`, `build_upload_image.py`) uses one shared tag (`0.2.0`) for every service under `siaraz` — so
+every pod but one hit `ImagePullBackOff` on a fresh deploy. Rewrote every image reference in both
+manifests (and the generated `deploy.yaml`) to `siaraz/*:0.2.0`.
+
+**Kubernetes path: OS-detection bug broke `sed` on Linux**
+`hack/deploy/gen-mysql-secret.sh` checked `[ "$(uname)"="Darwin" ]` — missing the required spaces
+around `=` inside `[ ]`, which makes the whole thing a single always-non-empty string that's always
+"true" — so it *always* ran the macOS `sed -i ""` syntax, which GNU sed on Linux misparses (it reads
+the empty string as the script and the actual script as a filename to open, hence
+`sed: can't read s/nacos/nacos/g: No such file or directory`). Fixed to `[ "$(uname)" = "Darwin" ]`.
+
+**Kubernetes path: `make reset-deploy` never cleaned up the train-ticket MySQL cluster**
+`hack/deploy/reset.sh` uninstalled Helm releases via `helm ls | grep ts- | xargs helm uninstall`, but
+the all-in-one train-ticket MySQL release is named `tsdb` — no `ts-` substring, so it was silently
+skipped on every reset, leaving an orphaned release behind (and, in one observed case, its
+StatefulSet ended up stuck at `0/0` replicas afterwards, taking down every service that depends on
+it with `Connection refused` until manually scaled back up). Promoted the release name to a shared
+`tsMysqlName` constant in `utils.sh` and added it to `reset.sh`'s cleanup.
 
 ## Test scripts
 Use scripts to test train-ticket: [train-ticket-auto-query](https://github.com/FudanSELab/train-ticket-auto-query)
