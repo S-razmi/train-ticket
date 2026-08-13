@@ -123,10 +123,12 @@ at all. Added them, their databases, a RabbitMQ container (`ts-delivery-service`
 dependency), and the two missing gateway routes (`ts-delivery-service` is a pure queue consumer with
 no REST API, so it needs no route).
 
-One known upstream app-level bug was found but left unfixed as out of scope: `ts-wait-order-service`'s
-`SecurityConfig.java` only whitelists `/api/v1/orderservice/order/**` (a leftover from copy-pasting
-`ts-order-service`'s config), so every endpoint on that service — including ones meant to be public —
-requires authentication.
+**One app-level security bug**
+`ts-wait-order-service`'s `SecurityConfig.java` only whitelisted `/api/v1/orderservice/order/**` — a
+leftover from copy-pasting `ts-order-service`'s config that never got updated for its own
+`/api/v1/waitorderservice/**` prefix — so every endpoint on the service, including ones meant to be
+public, required authentication. Fixed to whitelist its own path (still requiring a role for the
+one write endpoint, `POST /order`).
 
 ## Test scripts
 Use scripts to test train-ticket: [train-ticket-auto-query](https://github.com/FudanSELab/train-ticket-auto-query)
