@@ -1,8 +1,8 @@
-# Codewisdom Train-Ticket system
+# siaraz Train-Ticket system
 
-Repo=codewisdom
+Repo=siaraz
 Tag=latest
-Namespace="default"
+Namespace="tt-default"
 DeployArgs=""
 
 
