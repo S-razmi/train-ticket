@@ -1,0 +1,99 @@
+# deployment/observability/jaeger/values.yaml
+#
+# Values for the official Jaeger Helm chart (jaegertracing/helm-charts,
+# chart "jaeger", app version 2.x), replacing the previous unpinned raw
+# `jaegertracing/all-in-one:latest` manifest.
+#
+# Legacy manifests used the Jaeger v1 all-in-one architecture (separate
+# tchannel/zipkin-compat ports, UDP agent). That architecture is deprecated
+# now that Jaeger v2 (OpenTelemetry-Collector-based, single "jaeger" binary)
+# is the supported model. This chart deploys the v2 binary directly; storage
+# is Badger (embedded, persisted to a PVC) so traces survive pod restarts
+# without pulling in Cassandra/Elasticsearch for a local testbed.
+
+# Chart default (storage.type: elasticsearch) only affects the ES
+# maintenance CronJobs below, all of which are disabled. Actual storage
+# backend is fully defined via userconfig.extensions.jaeger_storage.
+storage:
+  type: elasticsearch
+
+esIndexCleaner:
+  enabled: false
+esRollover:
+  enabled: false
+esLookback:
+  enabled: false
+spark:
+  enabled: false
+
+jaeger:
+  replicas: 1
+  image:
+    repository: jaegertracing/jaeger
+    tag: ""
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+  extraVolumes:
+    - name: badger-data
+      persistentVolumeClaim:
+        claimName: jaeger-badger-data
+  extraVolumeMounts:
+    - name: badger-data
+      mountPath: /badger
+
+# Full Jaeger v2 (OpenTelemetry Collector) config: OTLP in, Badger out.
+userconfig:
+  service:
+    extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        exporters: [jaeger_storage_exporter]
+    telemetry:
+      resource:
+        service.name: jaeger
+  extensions:
+    healthcheckv2:
+      use_v2: true
+      http:
+        endpoint: 0.0.0.0:13133
+    jaeger_query:
+      storage:
+        traces: primary_store
+    jaeger_storage:
+      backends:
+        primary_store:
+          badger:
+            directories:
+              keys: /badger/key
+              values: /badger/data
+            ephemeral: false
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  exporters:
+    jaeger_storage_exporter:
+      trace_storage: primary_store
+
+# PVC backing the Badger data volume above.
+extraObjects:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: jaeger-badger-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi

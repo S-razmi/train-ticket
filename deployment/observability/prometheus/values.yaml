@@ -1,0 +1,74 @@
+# deployment/observability/prometheus/values.yaml
+#
+# Minimal kube-prometheus-stack overrides for the local/Minikube testbed.
+#
+# Legacy observability manifests provided:
+#   - Prometheus
+#   - Alertmanager
+#   - Grafana
+#   - node-exporter
+#   - kube-state-metrics
+#
+# kube-prometheus-stack already provides all of these components by default.
+# Therefore, node-exporter and kube-state-metrics are intentionally omitted
+# here because their chart defaults are sufficient. This file only contains
+# settings that intentionally differ from the chart defaults for a
+# laptop-scale testbed.
+
+# ---------------------------------------------------------------------------
+# Prometheus
+# ---------------------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    # Keep enough history for local experiments without consuming excessive
+    # disk space.
+    retention: 7d
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1
+        memory: 1Gi
+
+
+# ---------------------------------------------------------------------------
+# Grafana
+# ---------------------------------------------------------------------------
+# Legacy manifests included Grafana. Keep it enabled, but use a predictable
+# local-testbed configuration.
+grafana:
+  enabled: true
+
+  adminPassword: admin
+
+  service:
+    type: NodePort
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+
+# ---------------------------------------------------------------------------
+# Alertmanager
+# ---------------------------------------------------------------------------
+# Alertmanager was present in the legacy observability deployment.
+# Leave it enabled with the chart's default configuration; no external
+# notification integrations are required for the local testbed.
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
