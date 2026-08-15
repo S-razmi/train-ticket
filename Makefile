@@ -51,3 +51,28 @@ clean:
 .PHONY: clean-image
 clean-image:
 	@hack/clean-image.sh $(Repo)
+
+
+.PHONY: prometheus
+prometheus:
+	@hack/observability/install-prometheus.sh
+
+.PHONY: prometheus-reset
+prometheus-reset:
+	@hack/observability/uninstall-prometheus.sh
+
+.PHONY: jaeger
+jaeger:
+	@hack/observability/install-jaeger.sh
+
+.PHONY: jaeger-reset
+jaeger-reset:
+	@hack/observability/uninstall-jaeger.sh
+
+.PHONY: loki
+loki:
+	@hack/observability/install-loki.sh
+
+.PHONY: loki-reset
+loki-reset:
+	@hack/observability/uninstall-loki.sh
