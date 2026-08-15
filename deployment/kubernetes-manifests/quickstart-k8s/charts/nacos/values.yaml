@@ -31,7 +31,7 @@ service:
   port: 8848
 
 initmysql:
-  image: "codewisdom/mysqlclient:0.1"
+  image: "siaraz/mysqlclient:0.1"
 
 
 

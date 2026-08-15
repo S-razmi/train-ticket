@@ -8,7 +8,7 @@ global:
 ############################nacos###########################
 rabbitmq:
   image:
-    repository: codewisdom/rabbitmq
+    repository: siaraz/rabbitmq
     tag: 3
     pullPolicy: IfNotPresent
   replicaCount: 1

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: ts-ui-dashboard
-        image: codewisdom/ts-ui-dashboard-with-jaeger:v1
+        image: siaraz/ts-ui-dashboard-with-jaeger:v1
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
