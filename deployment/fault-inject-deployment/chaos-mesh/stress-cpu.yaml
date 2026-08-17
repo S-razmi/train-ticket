@@ -1,0 +1,21 @@
+# StressChaos (CPU) template. Fields marked with a leading underscore
+# placeholder are overwritten by inject.py before kubectl apply:
+#   - metadata.name         -> unique experiment name (also cleanup() handle)
+#   - spec.selector.labelSelectors.app -> target service's `app` label
+#   - spec.duration         -> experiment duration
+#   - spec.stressors.cpu.workers/load -> from params, defaults kept here
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: stress-cpu-placeholder
+  namespace: default
+spec:
+  mode: all
+  selector:
+    labelSelectors:
+      app: placeholder-service
+  stressors:
+    cpu:
+      workers: 2
+      load: 80
+  duration: "60s"

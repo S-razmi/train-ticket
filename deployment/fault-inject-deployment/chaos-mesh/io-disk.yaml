@@ -1,0 +1,19 @@
+# IOChaos (disk latency) template. See stress-cpu.yaml for the placeholder
+# substitution convention used by inject.py. volumePath/path/delay/percent
+# are overridable via params.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: io-disk-placeholder
+  namespace: default
+spec:
+  action: latency
+  mode: all
+  selector:
+    labelSelectors:
+      app: placeholder-service
+  volumePath: /
+  path: "**/*"
+  delay: "100ms"
+  percent: 100
+  duration: "60s"

@@ -1,0 +1,34 @@
+# Values for the official chaos-mesh/chaos-mesh Helm chart.
+#
+# runtime/socketPath are left at chart defaults (docker /
+# /var/run/docker.sock) since this cluster's container runtime is Docker
+# (confirmed via `minikube profile list` -> RUNTIME=docker), which matches
+# the chart's own default - no override needed there.
+chaosDaemon:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+controllerManager:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+dashboard:
+  create: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi

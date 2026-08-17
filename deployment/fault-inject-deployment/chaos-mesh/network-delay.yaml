@@ -1,0 +1,19 @@
+# NetworkChaos (latency) template. See stress-cpu.yaml for the placeholder
+# substitution convention used by inject.py. latency/jitter/correlation are
+# overridable via params.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay-placeholder
+  namespace: default
+spec:
+  action: delay
+  mode: all
+  selector:
+    labelSelectors:
+      app: placeholder-service
+  delay:
+    latency: "100ms"
+    jitter: "10ms"
+    correlation: "50"
+  duration: "60s"

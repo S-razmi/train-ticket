@@ -1,0 +1,18 @@
+# NetworkChaos (packet loss) template. See stress-cpu.yaml for the
+# placeholder substitution convention used by inject.py. loss/correlation
+# are overridable via params.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-loss-placeholder
+  namespace: default
+spec:
+  action: loss
+  mode: all
+  selector:
+    labelSelectors:
+      app: placeholder-service
+  loss:
+    loss: "25"
+    correlation: "25"
+  duration: "60s"

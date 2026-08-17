@@ -1,0 +1,17 @@
+# StressChaos (memory) template. See stress-cpu.yaml for the placeholder
+# substitution convention used by inject.py.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: stress-mem-placeholder
+  namespace: default
+spec:
+  mode: all
+  selector:
+    labelSelectors:
+      app: placeholder-service
+  stressors:
+    memory:
+      workers: 1
+      size: "256MB"
+  duration: "60s"

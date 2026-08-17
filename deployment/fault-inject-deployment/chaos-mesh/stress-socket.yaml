@@ -1,0 +1,19 @@
+# StressChaos (socket exhaustion) template. Chaos Mesh's structured
+# `stressors` field has no built-in socket stressor, so this uses the
+# `stressngStressors` escape hatch to pass raw stress-ng flags directly
+# (`--sock N` spawns N socket client/server worker pairs that open and
+# hold connections, exhausting file descriptors/ephemeral ports on the
+# target pod). See stress-cpu.yaml for the placeholder substitution
+# convention used by inject.py; params here are workers/socket_ops.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: stress-socket-placeholder
+  namespace: default
+spec:
+  mode: all
+  selector:
+    labelSelectors:
+      app: placeholder-service
+  stressngStressors: "--sock 4 --sock-ops 20000"
+  duration: "60s"
