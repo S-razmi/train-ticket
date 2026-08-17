@@ -36,9 +36,11 @@ spec:
               value: "true"
             - name: OTEL_EBPF_METRICS_FEATURES
               value: application,network
-            - name: OTEL_EBPF_AUTO_TARGET_EXE
-              value: "*"
+            - name: OTEL_EBPF_CONFIG_PATH
+              value: /etc/obi/config.yaml
           volumeMounts:
+            - name: obi-config
+              mountPath: /etc/obi
             - name: sys-fs-bpf
               mountPath: /sys/fs/bpf
             - name: sys-kernel-debug
@@ -78,6 +80,9 @@ spec:
               memory: 512Mi
 
       volumes:
+        - name: obi-config
+          configMap:
+            name: otel-obi-obi-config
         - name: sys-fs-bpf
           hostPath:
             path: /sys/fs/bpf

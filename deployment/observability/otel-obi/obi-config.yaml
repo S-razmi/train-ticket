@@ -1,0 +1,18 @@
+# Restricts OBI to instrumenting only pods in the train-ticket app
+# namespace (default), instead of every process on the node. Without this,
+# OTEL_EBPF_AUTO_TARGET_EXE=* also captures node-level/system processes
+# (dockerd, containerd, kubelet, minikube itself) and everything in
+# kube-system and observability (including OBI/otelcol/Jaeger/Loki/
+# Prometheus tracing themselves) - noise that overwhelmed Jaeger's storage
+# (see TROUBLESHOOTING.md #10). An allow-list on k8s_namespace is simpler
+# and safer here than trying to enumerate excludes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-obi-obi-config
+  namespace: observability
+data:
+  config.yaml: |
+    discovery:
+      instrument:
+        - k8s_namespace: default
