@@ -21,7 +21,10 @@ import sys
 
 import requests
 
+from http_retry import with_retries
+
 LOKI_LINE_LIMIT = 5000
+REQUEST_TIMEOUT = 60
 
 
 class LogsExportError(RuntimeError):
@@ -29,12 +32,15 @@ class LogsExportError(RuntimeError):
 
 
 def _query_range(loki_url, tenant, logql, start_ns, end_ns, limit):
-    resp = requests.get(
-        f"{loki_url}/loki/api/v1/query_range",
-        params={"query": logql, "start": start_ns, "end": end_ns, "limit": limit, "direction": "forward"},
-        headers={"X-Scope-OrgID": tenant},
-        timeout=30,
-    )
+    def _do_request():
+        return requests.get(
+            f"{loki_url}/loki/api/v1/query_range",
+            params={"query": logql, "start": start_ns, "end": end_ns, "limit": limit, "direction": "forward"},
+            headers={"X-Scope-OrgID": tenant},
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    resp = with_retries(_do_request, retry_on=(requests.exceptions.RequestException,))
     if resp.status_code != 200:
         raise LogsExportError(f"Loki query_range HTTP {resp.status_code}: {resp.text}")
     body = resp.json()

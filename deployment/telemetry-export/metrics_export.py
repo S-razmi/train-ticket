@@ -15,9 +15,11 @@ import sys
 
 import requests
 
+from http_retry import with_retries
 from metrics_map import FEATURE_QUERIES
 
 IDENTITY_LABELS = ["pod", "node", "instance", "service_name"]
+REQUEST_TIMEOUT = 60
 
 
 class MetricsExportError(RuntimeError):
@@ -25,11 +27,14 @@ class MetricsExportError(RuntimeError):
 
 
 def _query_range(prometheus_url, promql, start, end, step):
-    resp = requests.get(
-        f"{prometheus_url}/api/v1/query_range",
-        params={"query": promql, "start": start, "end": end, "step": step},
-        timeout=30,
-    )
+    def _do_request():
+        return requests.get(
+            f"{prometheus_url}/api/v1/query_range",
+            params={"query": promql, "start": start, "end": end, "step": step},
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    resp = with_retries(_do_request, retry_on=(requests.exceptions.RequestException,))
     if resp.status_code != 200:
         raise MetricsExportError(f"Prometheus query_range HTTP {resp.status_code}: {resp.text}")
     body = resp.json()

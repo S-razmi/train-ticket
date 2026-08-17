@@ -28,7 +28,10 @@ import sys
 
 import requests
 
+from http_retry import with_retries
+
 DEFAULT_LIMIT_PER_SERVICE = 500
+REQUEST_TIMEOUT = 60
 
 
 class TracesExportError(RuntimeError):
@@ -36,7 +39,10 @@ class TracesExportError(RuntimeError):
 
 
 def _get(jaeger_url, path, params=None):
-    resp = requests.get(f"{jaeger_url}{path}", params=params, timeout=30)
+    resp = with_retries(
+        lambda: requests.get(f"{jaeger_url}{path}", params=params, timeout=REQUEST_TIMEOUT),
+        retry_on=(requests.exceptions.RequestException,),
+    )
     if resp.status_code != 200:
         raise TracesExportError(f"Jaeger GET {path} HTTP {resp.status_code}: {resp.text}")
     return resp.json()
