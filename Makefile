@@ -88,3 +88,11 @@ otel-obi-reset:
 .PHONY: verify-observability
 verify-observability:
 	@verify/run-all.sh
+
+.PHONY: chaos-mesh
+chaos-mesh:
+	@hack/chaos-mesh/install-chaos-mesh.sh
+
+.PHONY: chaos-mesh-reset
+chaos-mesh-reset:
+	@hack/chaos-mesh/uninstall-chaos-mesh.sh
