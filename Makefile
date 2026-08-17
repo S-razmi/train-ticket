@@ -84,3 +84,7 @@ otel-obi:
 .PHONY: otel-obi-reset
 otel-obi-reset:
 	@hack/observability/uninstall-otel-obi.sh
+
+.PHONY: verify-observability
+verify-observability:
+	@verify/run-all.sh
