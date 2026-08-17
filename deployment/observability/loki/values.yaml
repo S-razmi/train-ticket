@@ -22,7 +22,7 @@ ignoreMinioDeprecation: true  # Temporary workaround – MinIO will be removed 2
 minio:
   enabled: true
       
-deploymentMode: Monolithic
+deploymentMode: SingleBinary
 
 singleBinary:
   replicas: 1
