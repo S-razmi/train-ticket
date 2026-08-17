@@ -34,6 +34,55 @@ prometheus:
 
 
 # ---------------------------------------------------------------------------
+# kubelet / cAdvisor scrape relabeling
+# ---------------------------------------------------------------------------
+# The chart's default cAdvisorMetricRelabelings (see
+# `helm show values prometheus-community/kube-prometheus-stack --version
+# 88.3.0`) drops several container_* metrics as "less useful" - but
+# deployment/telemetry-export/metrics_map.py needs some of them
+# (container_cpu_user_seconds_total, container_cpu_system_seconds_total,
+# container_memory_swap, container_memory_mapped_file,
+# container_spec_cpu_quota, container_spec_memory_limit_bytes). Confirmed
+# via `kubectl get --raw /api/v1/nodes/minikube/proxy/metrics/cadvisor`
+# that cAdvisor genuinely emits all of these with correct per-pod labels
+# on this cluster - they were only ever being dropped by this
+# relabeling, not missing at the source. This is the same list as the
+# chart default with exactly those three drop rules removed; the other
+# rules (container_fs_*, file descriptor/thread counts, the
+# memory_failures_total{scope=hierarchy} dedup, the CNI-interface
+# network filter, and - importantly - the final "drop cgroup metrics
+# with no pod" rule) are kept as-is.
+#
+# NOT included here: container_network_* is still absent even with this
+# override, because it's not a relabeling problem - `kubectl get --raw
+# .../metrics/cadvisor | grep container_network_receive_bytes_total`
+# shows it only exists at the root cgroup level (id="/", pod="") on this
+# minikube+docker-driver setup, cAdvisor never associates it with an
+# actual pod here. The last drop rule below (cgroup metrics with no pod)
+# correctly discards that root-level noise; there's no real per-pod
+# series underneath for it to keep. Getting real per-pod
+# container_network_* would need a different CNI/runtime setup, not a
+# Prometheus config change.
+kubelet:
+  serviceMonitor:
+    cAdvisorMetricRelabelings:
+      - sourceLabels: [__name__]
+        action: drop
+        regex: 'container_fs_(io_current|io_time_seconds_total|io_time_weighted_seconds_total|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)'
+      - sourceLabels: [__name__]
+        action: drop
+        regex: 'container_(file_descriptors|tasks_state|threads_max)'
+      - sourceLabels: [__name__, scope]
+        action: drop
+        regex: 'container_memory_failures_total;hierarchy'
+      - sourceLabels: [__name__, interface]
+        action: drop
+        regex: 'container_network_.*;(cali|cilium|cni|lxc|nodelocaldns|tunl).*'
+      - sourceLabels: [id, pod]
+        action: drop
+        regex: '.+;'
+
+# ---------------------------------------------------------------------------
 # Grafana
 # ---------------------------------------------------------------------------
 # Legacy manifests included Grafana. Keep it enabled, but use a predictable

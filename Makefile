@@ -108,3 +108,7 @@ load-generator-reset:
 .PHONY: load-generator-job
 load-generator-job:
 	@hack/load-generator/run-job.sh
+
+.PHONY: telemetry-export
+telemetry-export:
+	@hack/telemetry-export/export.sh $(TelemetryArgs)

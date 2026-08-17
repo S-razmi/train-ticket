@@ -34,3 +34,6 @@ ENV/
 env.bak/
 venv.bak/
 
+# telemetry-export run output (deployment/telemetry-export/run_writer.py)
+/data/
+
