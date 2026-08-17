@@ -1,0 +1,35 @@
+# Shared identity for both containers in the otel-obi DaemonSet:
+# - obi needs to read Pod metadata to enrich spans/metrics with k8s labels
+#   (OTEL_EBPF_KUBE_METADATA_ENABLE=true).
+# - otelcol's k8sattributes processor needs to watch Pods/Namespaces to
+#   enrich traces and logs the same way.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-obi
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-obi
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-obi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-obi
+subjects:
+  - kind: ServiceAccount
+    name: otel-obi
+    namespace: observability

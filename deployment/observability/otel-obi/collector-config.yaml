@@ -1,0 +1,83 @@
+# otelcol-contrib config for the otel-obi DaemonSet. Receives OTLP
+# traces+metrics from the sibling `obi` container over localhost, tails
+# node container logs directly, and fans out to the three existing
+# observability/ backends (Jaeger, Loki, kube-prometheus-stack).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-obi-collector-config
+  namespace: observability
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 127.0.0.1:4317
+          http:
+            endpoint: 127.0.0.1:4318
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          - /var/log/pods/observability_otel-obi-*/**
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          - type: container
+            id: container-parser
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.namespace.name
+            - k8s.node.name
+            - k8s.container.name
+            - k8s.deployment.name
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.name
+              - from: resource_attribute
+                name: k8s.namespace.name
+          - sources:
+              - from: connection
+      batch: {}
+
+    exporters:
+      otlp/jaeger:
+        endpoint: jaeger.observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+      otlphttp/loki:
+        endpoint: http://loki-gateway.observability.svc.cluster.local:80/otlp
+        tls:
+          insecure: true
+        headers:
+          X-Scope-OrgID: train-ticket
+      prometheus:
+        endpoint: 0.0.0.0:9464
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlp/jaeger]
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlphttp/loki]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [prometheus]

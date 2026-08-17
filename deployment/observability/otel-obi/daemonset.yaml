@@ -1,0 +1,103 @@
+# One DaemonSet, two containers per pod (single pod on this single-node
+# minikube cluster): `obi` captures traces+HTTP metrics via eBPF with no
+# app-level instrumentation required, `otelcol` receives that over
+# localhost, tails node container logs itself, and fans out to Jaeger,
+# Loki, and Prometheus.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-obi
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: otel-obi
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-obi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-obi
+        release: kube-prometheus-stack
+    spec:
+      serviceAccountName: otel-obi
+      hostPID: true
+      containers:
+        - name: obi
+          image: otel/ebpf-instrument:v0.10.0
+          securityContext:
+            privileged: true
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://localhost:4318
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: http/protobuf
+            - name: OTEL_EBPF_KUBE_METADATA_ENABLE
+              value: "true"
+            - name: OTEL_EBPF_METRICS_FEATURES
+              value: application,network
+            - name: OTEL_EBPF_AUTO_TARGET_EXE
+              value: "*"
+          volumeMounts:
+            - name: sys-fs-bpf
+              mountPath: /sys/fs/bpf
+            - name: sys-kernel-debug
+              mountPath: /sys/kernel/debug
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 2Gi
+
+        - name: otelcol
+          image: otel/opentelemetry-collector-contrib:0.122.0
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - name: metrics
+              containerPort: 9464
+          volumeMounts:
+            - name: collector-config
+              mountPath: /etc/otelcol
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: dockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+      volumes:
+        - name: sys-fs-bpf
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: sys-kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: collector-config
+          configMap:
+            name: otel-obi-collector-config
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: dockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+            type: Directory

@@ -399,6 +399,23 @@ Save & test again after adding it.
 
 ---
 
+## 10. otel-obi: three separate first-deploy failures (bad config, OOM, no traces)
+
+**Symptom / root cause / fix, three issues hit in sequence bringing up `deployment/observability/otel-obi/`:**
+
+1. **`otelcol` `CrashLoopBackOff`**, logs show `unknown type: "loki" for id: "loki" (valid values: [... otlp])`. The dedicated `loki` exporter component has been removed from `otel/opentelemetry-collector-contrib` (confirmed absent at `0.122.0`). Fix: export logs via `otlphttp` against Loki's native OTLP endpoint instead — `endpoint: http://loki-gateway.observability.svc.cluster.local:80/otlp`, same `X-Scope-OrgID` header requirement as issue #9 above.
+2. **`obi` `CrashLoopBackOff`**, logs show `wrong configuration: at least one of 'network', 'application' or 'stats' features must be enabled`. `OTEL_EBPF_METRICS_FEATURES` only accepts `network`, `application`, `stats` — not made-up values like `application_span`. Fix: set it to `application,network`.
+3. **`obi` container stuck in "Network metrics mode" only** (no HTTP spans/traces produced) even after fixing #2, with only `starting OBI in Network metrics mode` in the logs and no `starting Application Observability mode` line. Root cause: `OTEL_EBPF_METRICS_FEATURES` controls the *metrics* pipeline; application-level span generation is a separate switch that needs a process-selection target — without one, OBI has nothing to attach uprobes to for HTTP tracing. Fix: add `OTEL_EBPF_AUTO_TARGET_EXE=*` to instrument every executable on the node (OBI's default excludes already skip itself, `otelcol`, and `kube-system`/`kube-node-lease` namespaces, so this is safe to leave broad on a single-purpose cluster like this one).
+4. **`obi` `OOMKilled`** (exit code 137) within ~20-30s of restart, right after switching to Application Observability mode with the `*` target. Instrumenting ~50 microservices' processes simultaneously needs more than the initial `512Mi` limit. Fix: bumped `obi` container to `requests: 512Mi` / `limits: 2Gi` in `daemonset.yaml`.
+
+**Notes for a fresh deployment**
+
+- Discovery of already-running processes is not instant: after a clean start with `OTEL_EBPF_AUTO_TARGET_EXE=*`, `curl http://localhost:16686/api/services` initially reported only a couple of services and grew to the full ~56-service list over roughly a minute of driving traffic + waiting — don't conclude something's broken from an incomplete service list moments after rollout.
+- Log records tailed by the `filelog` receiver carry no `trace_id` attribute, since none of the train-ticket services emit W3C trace context into their own log lines (they're not OTel-SDK-instrumented — that's the whole reason OBI/eBPF is used here). Trace-to-log correlation by timestamp + `k8s.pod.name`/`k8s.namespace.name` labels is possible; correlation by shared `trace_id` in Loki is not, unless the apps are changed to log it themselves.
+- Verified end-to-end: a `POST /api/v1/travelservice/trips/left` request through `ts-gateway-service` produced a single Jaeger trace ID with properly nested parent/child spans across `ts-gateway-service` → `ts-travel-service` (proves W3C `traceparent` propagates through OBI's eBPF capture, not just isolated per-service spans); the same request's log lines appeared in Loki under the `train-ticket` tenant with correct `k8s_*` labels; and `http_client_request_duration_seconds` metrics for the same route/service pair appeared on the collector's `:9464` Prometheus endpoint, scraped successfully by kube-prometheus-stack via the `PodMonitor` (`podMonitor/observability/otel-obi/0` reports `health: up`).
+
+---
+
 ## General diagnostic workflow used
 
 ```bash

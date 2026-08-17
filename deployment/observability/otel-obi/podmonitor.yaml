@@ -1,0 +1,19 @@
+# kube-prometheus-stack's Prometheus only watches PodMonitors matching
+# release: kube-prometheus-stack (see `kubectl get prometheus -n
+# observability -o jsonpath='{.items[0].spec.podMonitorSelector}'`).
+# A DaemonSet pod has no stable Service, hence PodMonitor, not ServiceMonitor.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: otel-obi
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-obi
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

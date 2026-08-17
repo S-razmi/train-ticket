@@ -76,3 +76,11 @@ loki:
 .PHONY: loki-reset
 loki-reset:
 	@hack/observability/uninstall-loki.sh
+
+.PHONY: otel-obi
+otel-obi:
+	@hack/observability/install-otel-obi.sh
+
+.PHONY: otel-obi-reset
+otel-obi-reset:
+	@hack/observability/uninstall-otel-obi.sh
