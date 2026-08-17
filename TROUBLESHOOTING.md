@@ -350,6 +350,55 @@ JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64 mvn clean package -Dmaven.test.skip=
 
 ---
 
+## 9. Loki: `no org id` / empty results / Grafana "Unable to connect with Loki"
+
+**Symptom**
+
+Querying Loki directly through the gateway fails with a plain-text body:
+
+```
+no org id
+```
+
+Adding `X-Scope-OrgID` fixes that, but a query can still come back with an empty `data` array even though logs are definitely being pushed (e.g. `loki-canary` is visibly running). Separately, adding Loki as a Grafana data source and clicking "Save & test" gives a generic **"Unable to connect with Loki. Please check the server logs for more details."** — the gateway's own log for that request shows a `401`, not a connection-level error:
+
+```
+"GET /loki/api/v1/query?...vector(1)+vector(1)... HTTP/1.1" 401 ... "Grafana/13.1.3"
+```
+
+**Root cause**
+
+This Loki install has `auth_enabled: true` (`kubectl get cm loki -n observability -o jsonpath='{.data.config\.yaml}'`), i.e. multi-tenant mode. Every request through the gateway must carry an `X-Scope-OrgID` header:
+
+- Missing entirely → `no org id`.
+- Present but for the wrong tenant → request succeeds (`"status":"success"`) but `data` is empty, since it's a valid query against a tenant that has no matching logs — easy to mistake for "Loki has no data" rather than "wrong tenant".
+- Grafana doesn't send this header by default, so its own health-check query (`vector(1)+vector(1)`) gets rejected with `401`, which the UI only reports as a generic connection failure.
+
+`loki-canary` pushes its logs under tenant `self-monitoring` (`-tenant-id=self-monitoring` in its DaemonSet args) — a convenient known-good tenant for sanity-checking a fresh install, but any app pushing to Loki without an explicit `-tenant-id`/tenant config will land under whatever that client's default tenant is, which may not be `self-monitoring`.
+
+**Fix**
+
+For direct API access, pass the header explicitly and use the tenant the data was actually written under:
+
+```bash
+kubectl port-forward -n observability svc/loki-gateway 3100:80
+curl -s -H "X-Scope-OrgID: self-monitoring" "http://localhost:3100/loki/api/v1/labels"
+```
+
+For Grafana, add a custom HTTP header on the Loki data source (Connection settings → **Custom HTTP Headers**, not the Auth section):
+
+- Header: `X-Scope-OrgID`
+- Value: the tenant to query (e.g. `self-monitoring`)
+
+Save & test again after adding it.
+
+**Notes for a fresh deployment**
+
+- `/loki/api/v1/query` is instant/metric-query only; log line queries (a plain LogQL stream selector) need `/loki/api/v1/query_range` instead — using the wrong endpoint returns `log queries are not supported as an instant query type`, not empty results. Don't mistake that for the tenant issue above.
+- If you don't actually need multi-tenancy for this deployment, the alternative fix is setting `auth_enabled: false` in `deployment/observability/loki/values.yaml` so nothing needs the header at all — not done here since it wasn't clear multi-tenancy is unwanted, but worth considering if the header requirement keeps causing friction.
+
+---
+
 ## General diagnostic workflow used
 
 ```bash
