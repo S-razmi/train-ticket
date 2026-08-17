@@ -1,0 +1,65 @@
+# Continuous load generator: no --run-time, so it keeps generating traffic
+# indefinitely once started - meant to be brought up before a Chaos Mesh
+# experiment (deployment/fault-inject-deployment/chaos-mesh/) and left
+# running through it, then torn down afterward.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  namespace: default
+  labels:
+    app: load-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      containers:
+        - name: locust
+          image: locustio/locust:2.46.3
+          args:
+            - "-f"
+            - "/mnt/locust/locustfile.py"
+            - "--host"
+            - "$(TARGET_HOST)"
+            - "--headless"
+            - "--users"
+            - "$(LOCUST_USERS)"
+            - "--spawn-rate"
+            - "$(LOCUST_SPAWN_RATE)"
+          env:
+            - name: TARGET_HOST
+              value: "http://ts-gateway-service.default.svc.cluster.local:18888"
+            - name: LOCUST_USERS
+              value: "10"
+            - name: LOCUST_SPAWN_RATE
+              value: "2"
+            - name: TT_USERNAME
+              value: "fdse_microservice"
+            - name: TT_PASSWORD
+              value: "111111"
+            - name: TT_FROM_STATION
+              value: "nanjing"
+            - name: TT_TO_STATION
+              value: "shanghai"
+            - name: TT_SEAT_TYPE
+              value: "2"
+          volumeMounts:
+            - name: locust-script
+              mountPath: /mnt/locust
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: locust-script
+          configMap:
+            name: load-generator-script

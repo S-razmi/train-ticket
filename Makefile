@@ -96,3 +96,15 @@ chaos-mesh:
 .PHONY: chaos-mesh-reset
 chaos-mesh-reset:
 	@hack/chaos-mesh/uninstall-chaos-mesh.sh
+
+.PHONY: load-generator
+load-generator:
+	@hack/load-generator/deploy.sh
+
+.PHONY: load-generator-reset
+load-generator-reset:
+	@hack/load-generator/undeploy.sh
+
+.PHONY: load-generator-job
+load-generator-job:
+	@hack/load-generator/run-job.sh

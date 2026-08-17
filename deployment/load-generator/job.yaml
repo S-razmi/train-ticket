@@ -1,0 +1,67 @@
+# One-off, finite-duration load burst (e.g. to warm up before starting a
+# Chaos Mesh experiment, or to generate a fixed amount of traffic for a
+# single test run). For continuously-running load left up through an
+# experiment, use deployment.yaml instead.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-generator-job
+  namespace: default
+  labels:
+    app: load-generator
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust
+          image: locustio/locust:2.46.3
+          args:
+            - "-f"
+            - "/mnt/locust/locustfile.py"
+            - "--host"
+            - "$(TARGET_HOST)"
+            - "--headless"
+            - "--users"
+            - "$(LOCUST_USERS)"
+            - "--spawn-rate"
+            - "$(LOCUST_SPAWN_RATE)"
+            - "--run-time"
+            - "$(LOCUST_RUN_TIME)"
+          env:
+            - name: TARGET_HOST
+              value: "http://ts-gateway-service.default.svc.cluster.local:18888"
+            - name: LOCUST_USERS
+              value: "10"
+            - name: LOCUST_SPAWN_RATE
+              value: "2"
+            - name: LOCUST_RUN_TIME
+              value: "5m"
+            - name: TT_USERNAME
+              value: "fdse_microservice"
+            - name: TT_PASSWORD
+              value: "111111"
+            - name: TT_FROM_STATION
+              value: "nanjing"
+            - name: TT_TO_STATION
+              value: "shanghai"
+            - name: TT_SEAT_TYPE
+              value: "2"
+          volumeMounts:
+            - name: locust-script
+              mountPath: /mnt/locust
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: locust-script
+          configMap:
+            name: load-generator-script
