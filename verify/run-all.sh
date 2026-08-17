@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs the full observability verification suite and prints a summary
-# report. Exits non-zero if any check failed.
+# Runs the full observability + Chaos Mesh verification suite and prints a
+# summary report. Exits non-zero if any check failed.
 #
 # Usage: verify/run-all.sh
 # (or: make verify-observability)
@@ -13,8 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 trap cleanup_port_forwards EXIT
 
-echo "Observability verification suite"
-echo "namespace: ${NAMESPACE}  |  app namespace: ${APP_NAMESPACE}"
+echo "Verification suite"
+echo "observability namespace: ${NAMESPACE}  |  chaos-mesh namespace: ${CHAOS_MESH_NAMESPACE}  |  app namespace: ${APP_NAMESPACE}"
 
 # shellcheck source=check-infra.sh
 source "${SCRIPT_DIR}/check-infra.sh"
@@ -22,6 +22,8 @@ source "${SCRIPT_DIR}/check-infra.sh"
 source "${SCRIPT_DIR}/check-otel-obi.sh"
 # shellcheck source=check-smoke-test.sh
 source "${SCRIPT_DIR}/check-smoke-test.sh"
+# shellcheck source=check-chaos-mesh.sh
+source "${SCRIPT_DIR}/check-chaos-mesh.sh"
 
 section "Summary"
 

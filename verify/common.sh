@@ -5,6 +5,7 @@
 
 NAMESPACE="observability"
 APP_NAMESPACE="default"
+CHAOS_MESH_NAMESPACE="chaos-mesh"
 
 # Each entry: "component|check|status|detail"
 RESULTS=()
@@ -51,4 +52,54 @@ cleanup_port_forwards() {
   for pid in "${PF_PIDS[@]:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" > /dev/null 2>&1 || true
   done
+}
+
+# check_helm_release <component> <release> <namespace>
+# Checks the release exists AND its Helm status is 'deployed' - `helm
+# status` alone exits 0 even for a 'failed' release, so the status field
+# itself has to be inspected.
+check_helm_release() {
+  local component="$1" release="$2" ns="$3"
+  local status_json
+  status_json="$(helm status "${release}" -n "${ns}" -o json 2>/dev/null)"
+
+  if [[ -z "${status_json}" ]]; then
+    record "${component}" "helm release '${release}' deployed" "FAIL" "not found in namespace ${ns}"
+    return
+  fi
+
+  local release_status
+  release_status="$(echo "${status_json}" | jq -r '.info.status')"
+  if [[ "${release_status}" == "deployed" ]]; then
+    record "${component}" "helm release '${release}' deployed" "PASS"
+  else
+    record "${component}" "helm release '${release}' deployed" "FAIL" "status is '${release_status}', not 'deployed'"
+  fi
+}
+
+# check_workload_kind_ready <component> <namespace> <kind> <desired-field> <ready-field>
+# Workload-level readiness (Deployments/StatefulSets/DaemonSets), not
+# per-pod-name matching: this stays correct regardless of how each chart
+# names its pods, so it holds up on a fresh deploy or a chart version bump.
+check_workload_kind_ready() {
+  local component="$1" ns="$2" kind="$3" desired_field="$4" ready_field="$5"
+  local items
+  items="$(kubectl get "${kind}" -n "${ns}" -o json 2>/dev/null | jq '.items')"
+
+  local total
+  total="$(echo "${items}" | jq 'length')"
+  if [[ "${total}" -eq 0 ]]; then
+    return
+  fi
+
+  local not_ready_names
+  not_ready_names="$(echo "${items}" | jq -r --arg d "${desired_field}" --arg r "${ready_field}" '
+    [.[] | select(((.status[$r] // 0)) < ((.status[$d] // .spec.replicas // 1))) | .metadata.name] | join(", ")
+  ')"
+
+  if [[ -z "${not_ready_names}" ]]; then
+    record "${component}" "${kind} workloads ready (${total} found)" "PASS"
+  else
+    record "${component}" "${kind} workloads ready (${total} found)" "FAIL" "not ready: ${not_ready_names}"
+  fi
 }
