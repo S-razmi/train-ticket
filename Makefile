@@ -5,6 +5,15 @@ Tag=latest
 Namespace="default"
 DeployArgs=""
 
+# `make` with no target builds everything: the application, the monitoring
+# stack, and Chaos Mesh.
+.DEFAULT_GOAL := all
+
+.PHONY: all
+all: app monitoring chaos-mesh
+
+.PHONY: reset-all
+reset-all: chaos-mesh-reset monitoring-reset app-reset
 
 # build image
 .PHONY: build
@@ -23,24 +32,35 @@ build-image:
 push-image:
 	@hack/push-image.sh $(Repo)
 
+# build every ts-* image and push it in one pass (mvn build + per-service
+# docker build + push - see build_upload_image.py)
 .PHONY: publish-image
 publish-image:
-	@script/publish-docker-images.sh $(Repo) $(Tag)
+	@python3 build_upload_image.py
 
 # deploy
 # DeployArgs ""                    : deploy train-ticket with all-in-one mysql cluster
 # DeployArgs "--independent-db"    : deploy train-ticket with mysql cluster each service
-# DeployArgs "--with-monitoring"   : deploy train-ticket with prometheus
-# DeployArgs "--with-tracing"      : deploy train-ticket with skywalking
 # DeployArgs "--all"               : deploy train-ticket with mysql cluster each service
+#
+# Monitoring and Chaos Mesh used to be deploy-time flags here
+# (--with-monitoring, --with-tracing); they're now the separate `monitoring`
+# and `chaos-mesh` targets below, since both are independently
+# installable/removable stacks, not properties of the app deployment itself.
 .PHONY: deploy
 deploy:
 	@hack/deploy/deploy.sh $(Namespace) "$(DeployArgs)"
 
-# deploy
 .PHONY: reset-deploy
 reset-deploy:
 	@hack/deploy/reset.sh $(Namespace)
+
+# the train-ticket application alone
+.PHONY: app
+app: deploy
+
+.PHONY: app-reset
+app-reset: reset-deploy
 
 .PHONY: clean
 clean:
@@ -85,10 +105,18 @@ otel-obi:
 otel-obi-reset:
 	@hack/observability/uninstall-otel-obi.sh
 
+# the full monitoring stack alone: Prometheus, Jaeger, Loki, OBI/OTel Collector
+.PHONY: monitoring
+monitoring: prometheus jaeger loki otel-obi
+
+.PHONY: monitoring-reset
+monitoring-reset: otel-obi-reset loki-reset jaeger-reset prometheus-reset
+
 .PHONY: verify-observability
 verify-observability:
 	@verify/run-all.sh
 
+# chaos mesh alone
 .PHONY: chaos-mesh
 chaos-mesh:
 	@hack/chaos-mesh/install-chaos-mesh.sh

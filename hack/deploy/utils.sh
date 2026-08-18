@@ -46,17 +46,6 @@ function deploy_infrastructures {
   echo "End deployment Step <1/3>--------------------------------------"
 }
 
-function deploy_monitoring {
-  echo "Start deploy prometheus and grafana"
-  kubectl apply -f deployment/kubernetes-manifests/prometheus
-}
-
-function deploy_tracing {
-  echo "Start deploy skywalking"
-  namespace=$1
-  kubectl apply -f deployment/kubernetes-manifests/skywalking -n $namespace
-}
-
 function deploy_tt_mysql_all_in_one {
   namespace=$1
   echo "Start deployment Step <2/3>: mysql cluster of train-ticket services----------------------"

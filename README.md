@@ -95,9 +95,11 @@ Other deploy variants (combine freely via `DeployArgs`):
 | Variant | Command |
 |---|---|
 | Per-service MySQL clusters | `make deploy DeployArgs="--independent-db"` |
-| With Prometheus monitoring | `make deploy DeployArgs="--with-monitoring"` |
-| With SkyWalking tracing | `make deploy DeployArgs="--with-tracing"` |
 | Everything | `make deploy DeployArgs="--all"` |
+
+Monitoring (Prometheus/Jaeger/Loki/OBI) and Chaos Mesh are no longer deploy-time flags — they're separate,
+independently installable stacks: `make monitoring` and `make chaos-mesh` (see the `Makefile` for the full set of
+targets, including `make all` to bring up everything at once).
 
 Tear down: `make reset-deploy` (add `Namespace=yourns` if you deployed to a custom namespace). Note
 this doesn't delete the underlying MySQL StatefulSets' PVCs (Helm's intentional default, to avoid

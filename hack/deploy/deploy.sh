@@ -11,8 +11,6 @@ args="$2"
 
 argNone=1
 argDB=0
-argMonitoring=0
-argTracing=0
 argAll=0
 
 function quick_start {
@@ -30,8 +28,6 @@ function deploy_all {
   deploy_tt_secret  $namespace
   deploy_tt_svc $namespace
   deploy_tt_dp_sw  $namespace
-  deploy_tracing  $namespace
-  deploy_monitoring
 }
 
 
@@ -56,17 +52,7 @@ function deploy {
 
     deploy_tt_secret  $namespace
     deploy_tt_svc $namespace
-
-    if [ $argTracing == 1 ]; then
-      deploy_tt_dp_sw  $namespace
-      deploy_tracing  $namespace
-    else
-      deploy_tt_dp $namespace
-    fi
-
-    if [ $argMonitoring == 1 ]; then
-      deploy_monitoring
-    fi
+    deploy_tt_dp $namespace
 }
 
 #deploy
@@ -81,12 +67,6 @@ function parse_args {
         ;;
       "--independent-db")
         argDB=1
-        ;;
-      "--with-monitoring")
-        argMonitoring=1
-        ;;
-      "--with-tracing")
-        argTracing=1
         ;;
       esac
     done

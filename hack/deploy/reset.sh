@@ -15,6 +15,3 @@ helm uninstall $rabbitmqRelease -n $namespace
 helm uninstall $nacosRelease -n $namespace
 helm uninstall $nacosDBRelease -n $namespace
 
-
-kubectl delete -f deployment/kubernetes-manifests/skywalking -n $namespace
-
