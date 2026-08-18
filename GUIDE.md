@@ -28,6 +28,7 @@ That's what this whole project is.
 8. [Directory reference](#8-directory-reference)
 9. [Running an experiment, start to finish](#9-running-an-experiment-start-to-finish)
 10. [What doesn't work (yet), and why — honestly](#10-what-doesnt-work-yet-and-why--honestly)
+11. [API Reference](#11-api-reference)
 
 ---
 
@@ -574,6 +575,598 @@ signal with no real underlying data would be worse than not having it.
 correctly for a single run. Running it across the full set of services and fault types — the actual point of
 building it — is a deliberately separate step, waiting on a decision about scope (how many services, which fault
 types, how many repeats) before committing to what could be a long-running, resource-intensive batch job.
+
+---
+
+## 11. API Reference
+
+Everything above is about *watching* Train Ticket from the outside. This section is about *talking* to it directly —
+the REST API the load generator (Phase 3) drives, documented in full so it's reusable outside this project too.
+Every endpoint below was verified live against a running cluster while it was being written (request/response bodies
+pulled from real traffic, not read off a controller signature and assumed correct) — the same standard as the rest
+of this guide.
+
+All requests go through the gateway (`ts-gateway-service`, port `18888`); don't call microservices directly by pod/
+service DNS name — the gateway does the Nacos-backed service discovery and load balancing.
+
+```
+Base URL: http://<gateway-host>:18888
+```
+
+In-cluster callers (e.g. the load generator) use `http://ts-gateway-service.default.svc.cluster.local:18888`.
+
+### 11.1 Conventions
+
+- All request/response bodies are JSON; set `Content-Type: application/json` on every POST/PUT.
+- Every response, success or failure, is wrapped the same way:
+  ```json
+  {"status": 1, "msg": "...", "data": {...}}
+  ```
+  `status: 1` means success. `status: 0` is a normal/expected failure (e.g. wrong password) still returned with
+  **HTTP 200** — check `status` in the body, not just the HTTP status code. A minority of endpoints (`order/query`
+  under certain inputs, see [11.13](#1113-known-bugs-and-quirks)) return a genuine HTTP 500 with no envelope at all.
+- Auth: send `Authorization: Bearer <token>` (the JWT from login) on every authenticated call. The gateway itself
+  does not enforce this — there's no blocking auth filter in `ts-gateway-service` — but individual services expect
+  it and some behavior (e.g. `preserveservice` and `rebookservice`) is keyed off it internally. Always send it
+  anyway for realistic traffic.
+- Dates are `yyyy-MM-dd` strings. Most trip-search endpoints reject a `departureTime`/`travelDate` earlier than
+  today.
+- Station names are lowercase and space-stripped server-side (`shanghai`, not `Shanghai` or `Shang Hai`) — send
+  them lowercase to avoid relying on that normalization.
+
+### 11.2 Authentication
+
+**Login:**
+```
+POST /api/v1/users/login
+```
+Controller: `ts-auth-service/src/main/java/auth/controller/UserController.java:41`
+
+Request:
+```json
+{"username": "fdse_microservice", "password": "111111", "verificationCode": ""}
+```
+`verificationCode` can be an empty string — it's skipped when blank.
+
+Response:
+```json
+{
+  "status": 1,
+  "msg": "login success",
+  "data": {
+    "userId": "4d2a46c7-71cb-4cf1-b5bb-b68406d9da6f",
+    "username": "fdse_microservice",
+    "token": "eyJhbGciOiJIUzI1NiJ9...."
+  }
+}
+```
+`data.token` is a JWT — this is the **only** place it's returned (not a response header). `data.userId` is the
+`accountId` used by every other authenticated endpoint below.
+
+**There is no logout endpoint anywhere in this codebase.** Auth is stateless JWT; nothing server-side to invalidate.
+Confirmed by `grep -rin logout` across the whole repo — no match in `ts-auth-service`, `ts-user-service`, or the
+gateway.
+
+**Register:**
+```
+POST /api/v1/userservice/users/register
+```
+Controller: `ts-user-service/src/main/java/user/controller/UserController.java:52`
+
+Request (`user.dto.UserDto`):
+```json
+{
+  "userName": "someone",
+  "password": "111111",
+  "gender": 1,
+  "documentType": 1,
+  "documentNum": "123456789012345678",
+  "email": "someone@example.com"
+}
+```
+`userId` is optional — omit it and the server generates a UUID.
+
+Response is **HTTP 201 Created** (not 200 — a real gotcha, see [11.13](#1113-known-bugs-and-quirks)):
+```json
+{"status": 1, "msg": "REGISTER USER SUCCESS", "data": {...saved User...}}
+```
+or `{"status": 0, "msg": "USER HAS ALREADY EXISTS", "data": null}`.
+
+Registration internally also creates the auth-side record in `ts-auth-service` — a newly registered account can log
+in immediately with `POST /api/v1/users/login`. It has **no payment balance** — every `pay` call for it will fail
+insufficient-funds until/unless something credits its account (nothing in this app does that except the seeded data
+in [11.12](#1112-verified-seed-data)).
+
+### 11.3 Trip search
+
+There are two independent trip datasets/services — high-speed (G/D trains) and everything else — plus a
+transfer-planning endpoint that queries both. **Not every station pair has working data for either one**, even when
+the station names themselves are valid and a route "logically" connects them — see
+[11.12](#1112-verified-seed-data) before picking a pair to test against.
+
+**High-speed trains (G/D):**
+```
+POST /api/v1/travelservice/trips/left
+```
+Controller: `ts-travel-service/src/main/java/travel/controller/TravelController.java:113`
+
+Request (`edu.fudan.common.entity.TripInfo`):
+```json
+{"startPlace": "nanjing", "endPlace": "shanghai", "departureTime": "2026-08-19"}
+```
+Field names are `startPlace`/`endPlace` — **not** `startingPlace`. Sending the wrong field name is silently
+accepted (Jackson ignores unknown JSON fields) and returns an empty list with HTTP 200, no error — easy to mistake
+for "no data" when it's actually "wrong request shape."
+
+Response (`data` is a list of `edu.fudan.common.entity.TripResponse`):
+```json
+{
+  "status": 1,
+  "msg": "Success",
+  "data": [
+    {
+      "tripId": {"type": "G", "number": "1234"},
+      "trainTypeName": "GaoTieOne",
+      "startStation": "nanjing",
+      "terminalStation": "shanghai",
+      "startTime": "2013-05-04 09:00:00",
+      "endTime": "2013-05-04 10:00:00",
+      "economyClass": 1073741823,
+      "confortClass": 1073741823,
+      "priceForEconomyClass": "95.0",
+      "priceForConfortClass": "250.0"
+    }
+  ]
+}
+```
+`tripId` is a nested `{type, number}` object, not a plain string — reconstruct the flat trip id other endpoints
+expect as `type + number` (e.g. `"G1234"`). `economyClass`/`confortClass` are seats-remaining counters seeded at
+`2^30-1` (effectively unlimited on this dataset).
+
+There's also `POST /api/v1/travelservice/trips/left_parallel`, same request/response shape, presumably a
+parallelized variant of the same query — not separately verified here.
+
+**Non-high-speed trains (Z/T/K):**
+```
+POST /api/v1/travel2service/trips/left
+```
+Controller: `ts-travel2-service` (`Travel2Controller.java:105`) — a **separate service and dataset**, not a
+filtered view of the endpoint above. Same `TripInfo` request shape, same `TripResponse` response shape. Booking
+still goes through the one shared `preserveservice/preserve` endpoint below regardless of which search endpoint
+found the trip.
+
+**Transfer / interline planning:**
+```
+POST /api/v1/travelplanservice/travelPlan/transferResult
+```
+Controller: `ts-travel-plan-service/src/main/java/travelplan/controller/TravelPlanController.java:32`
+
+Request (`travelplan.entity.TransferTravelInfo`):
+```json
+{"startStation": "taiyuan", "viaStation": "nanjing", "endStation": "shanghai", "travelDate": "2026-08-19", "trainType": ""}
+```
+`trainType` is accepted but unused by the underlying search.
+
+Response:
+```json
+{"status": 1, "msg": "...", "data": {"firstSectionResult": [TripResponse, ...], "secondSectionResult": [TripResponse, ...]}}
+```
+The two legs are returned separately, queried independently against both `ts-travel-service` and
+`ts-travel2-service` — **not** stitched into single combined itineraries; match legs client-side if you need that.
+
+Same controller also has non-transfer planning variants taking a plain `TripInfo` body: `POST
+/api/v1/travelplanservice/travelPlan/cheapest`, `/quickest`, `/minStation` — not separately verified here.
+
+### 11.4 Contacts
+
+A booking needs a `contactsId` (passenger record) tied to the `accountId`.
+
+**List existing contacts:**
+```
+GET /api/v1/contactservice/contacts/account/{accountId}
+```
+Response: `{"status": 1, "msg": "Success", "data": [{"id": "...", "accountId": "...", "name": "...", "documentType":
+1, "documentNumber": "...", "phoneNumber": "..."}]}`. The seeded `fdse_microservice` account already has two
+contacts (`Contacts_One`, `Contacts_Two`) — check here before creating a new one.
+
+**Create one:**
+```
+POST /api/v1/contactservice/contacts
+```
+Request: `{"accountId": "...", "name": "...", "documentType": 1, "documentNumber": "...", "phoneNumber": "..."}`.
+Response's `data.id` is the new `contactsId`.
+
+Controller: `ts-contacts-service/src/main/java/contacts/controller/ContactsController.java:20`.
+
+### 11.5 Booking (preserve)
+
+```
+POST /api/v1/preserveservice/preserve
+```
+Controller: `ts-preserve-service/src/main/java/preserve/controller/PreserveController.java:32`
+
+Request (`edu.fudan.common.entity.OrderTicketsInfo`) — every field, including empty-string placeholders for unused
+add-ons, is required:
+```json
+{
+  "accountId": "4d2a46c7-71cb-4cf1-b5bb-b68406d9da6f",
+  "contactsId": "7872e644-dad5-46d0-a9c6-fdc3f4c24485",
+  "tripId": "G1234",
+  "seatType": 2,
+  "loginToken": "<jwt>",
+  "date": "2026-08-19",
+  "from": "nanjing",
+  "to": "shanghai",
+  "assurance": 0,
+  "foodType": 0,
+  "stationName": "",
+  "storeName": "",
+  "foodName": "",
+  "foodPrice": 0,
+  "handleDate": "",
+  "consigneeName": "",
+  "consigneePhone": "",
+  "consigneeWeight": 0,
+  "withIn": false
+}
+```
+`tripId` here is the **flat string** (`"G1234"`), unlike the nested object the search endpoints return it as. See
+[11.11](#1111-enums) for `seatType`/`assurance`/`foodType` valid values, and [11.6](#116-add-ons-consign-food-assurance)
+for what the food/assurance fields actually do.
+
+Response is **not useful for getting the order id** — see [11.13](#1113-known-bugs-and-quirks):
+```json
+{"status": 1, "msg": "Success.", "data": "Success"}
+```
+
+### 11.6 Add-ons: consign, food, assurance
+
+**Baggage consignment:**
+```
+POST /api/v1/consignservice/consigns
+```
+Controller: `ts-consign-service/src/main/java/consign/controller/ConsignController.java:33`
+
+Request (`consign.entity.Consign`) — needs an existing order:
+```json
+{
+  "orderId": "...", "accountId": "...",
+  "handleDate": "2026-08-19", "targetDate": "2026-08-19",
+  "from": "nanjing", "to": "shanghai",
+  "consignee": "someone", "phone": "12345678901",
+  "weight": 5.0, "isWithin": true
+}
+```
+Don't send `id` (server-generated) or `price` (server-computed via `ts-consign-price-service`).
+
+Response: `{"status": 1, "msg": "You have consigned successfully! The price is 24.0", "data": {...ConsignRecord
+incl. id, price...}}`.
+
+Other endpoints on the same controller: `PUT` (update, include `id`), `GET
+/api/v1/consignservice/consigns/account/{accountId}`, `GET /api/v1/consignservice/consigns/order/{orderId}`.
+
+Price lookup on its own: `GET /api/v1/consignpriceservice/consignprice/{weight}/{isWithinRegion}` (e.g.
+`/5.0/true`) → `{"data": <price>}`.
+
+**Food:**
+
+Query what's available for a trip before ordering:
+```
+GET /api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}
+```
+e.g. `/api/v1/foodservice/foods/2026-08-19/nanjing/shanghai/G1234` →
+```json
+{
+  "status": 1, "msg": "Get All Food Success",
+  "data": {
+    "trainFoodList": [{"foodName": "Egg Soup", "price": 3.2}, {"foodName": "Pork Chop with rice", "price": 9.5}],
+    "foodStoreListMap": {
+      "nanjing": [{"storeName": "Burger King", "foodList": [{"foodName": "Big Burger", "price": 1.2}, ...], ...}],
+      "shanghai": [{"storeName": "KFC", ...}]
+    }
+  }
+}
+```
+**Only seeded for the G/D trips on the nanjing↔shanghai leg** — the same query against trips on other routes
+returns `"Get All Food Failed"`.
+
+Food is ordered as part of `preserve` (see above), not as a separate create call — set
+`foodType`/`foodName`/`foodPrice` (and `stationName`/`storeName` for pickup) on the preserve request; see
+[11.11](#1111-enums) for exact `foodType` semantics.
+
+**Assurance (insurance):**
+```
+GET /api/v1/assuranceservice/assurances/types
+```
+Read-only, lists the fixed set of assurance types (there's exactly one — see [11.11](#1111-enums)). Add insurance
+by setting `assurance` on the `preserve` request; there's no separate purchase call.
+
+### 11.7 Orders
+
+**Query:**
+```
+POST /api/v1/orderservice/order/query
+```
+Controller: `ts-order-service/src/main/java/order/controller/OrderController.java:57`
+
+Request (`order.entity.OrderInfo`) — **all four date fields are required even if you only want the state filter**,
+see [11.13](#1113-known-bugs-and-quirks):
+```json
+{
+  "loginId": "4d2a46c7-71cb-4cf1-b5bb-b68406d9da6f",
+  "enableStateQuery": true,
+  "state": 0,
+  "travelDateStart": "2020-01-01",
+  "travelDateEnd": "2030-01-01",
+  "boughtDateStart": "2020-01-01",
+  "boughtDateEnd": "2030-01-01"
+}
+```
+`state` is an [OrderStatus](#1111-enums) code; `0` = NOTPAID, useful right after a fresh `preserve` call.
+
+Response: `{"status": 1, "msg": "Get order num", "data": [Order, ...]}`, each `Order` has `id, boughtDate,
+travelDate, travelTime, accountId, trainNumber, seatClass, seatNumber, from, to, status, price, contactsName, ...`.
+Since `preserve` doesn't return the new order's id, find it here — filter by `trainNumber`/`from`/`to` and take the
+most recent `boughtDate`.
+
+**Query by id:** `GET /api/v1/orderservice/order/{orderId}`
+
+**Non-high-speed order variant:** preserve always creates the order via `ts-order-service`, regardless of trip
+prefix — `ts-order-other-service` is **not** populated by normal booking. Its own CRUD endpoints exist (`POST
+/api/v1/orderOtherService/orderOther/query`, `GET /{orderId}`, `GET /status/{orderId}/{status}`) but will mostly
+return empty against this app's actual data unless something else writes to it directly.
+
+### 11.8 Payment
+
+```
+POST /api/v1/inside_pay_service/inside_payment
+```
+Controller: `ts-inside-payment-service/src/main/java/inside_payment/controller/InsidePaymentController.java:31`
+
+Request:
+```json
+{"orderId": "...", "userId": "4d2a46c7-71cb-4cf1-b5bb-b68406d9da6f", "tripId": "G1234", "price": ""}
+```
+`price` is accepted but unused — the server re-fetches the real price from the order. `tripId` here is the flat
+string; its first character (`G`/`D` vs anything else) determines whether the implementation looks the order up in
+`ts-order-service` or `ts-order-other-service`.
+
+Deducts from the account's balance in `ts-inside-payment-service`. Only the seeded `fdse_microservice` account
+(10000 balance) and any account you've otherwise credited will have funds — see [11.12](#1112-verified-seed-data).
+
+### 11.9 Cancel
+
+```
+GET /api/v1/cancelservice/cancel/{orderId}/{loginId}
+```
+Controller: `ts-cancel-service/src/main/java/cancel/controller/CancelController.java:40`. `loginId` is the
+`accountId` — both are path variables, no request body. Internally fetches the order, checks its status, sets it to
+`CANCEL`, and refunds via the payment service — you only call this one endpoint.
+
+Preview the refund amount first: `GET /api/v1/cancelservice/cancel/refound/{orderId}`.
+
+Cancel will reject an order that's already in a terminal-ish state from `collect`/`execute`/`rebook` — see
+[11.10](#1110-post-booking-rebook-collectexecute).
+
+### 11.10 Post-booking: rebook, collect/execute
+
+Both of these move a **paid** order into a status that then blocks a plain `cancel` — treat them as alternative
+endings to a booking, not something you chain after cancel (or before it).
+
+**Rebook:**
+```
+POST /api/v1/rebookservice/rebook
+```
+Controller: `ts-rebook-service/src/main/java/rebook/controller/RebookController.java:38`
+
+Request (`rebook.entity.RebookInfo`):
+```json
+{"loginId": "...", "orderId": "...", "oldTripId": "G1234", "tripId": "G1235", "seatType": 2, "date": "2026-08-19"}
+```
+Auth is via the `Authorization` header only — the token is not a body field here (unlike `preserve`).
+
+Requirements enforced server-side: the order must be `PAID`; must be within 2 hours of the original travel time or
+earlier; the new trip must have seats for `seatType`. If the new price is higher, response is `{"status": 2, "msg":
+"Please pay the different money!", "data": {"differenceMoney": "..."}}` — follow up with `POST
+/api/v1/rebookservice/rebook/difference` (same body shape) to settle it. Otherwise `{"status": 1, "msg":
+"Success!"}` and the order is updated in place (status becomes `CHANGE`).
+
+**Collect and execute:**
+```
+GET /api/v1/executeservice/execute/collected/{orderId}
+GET /api/v1/executeservice/execute/execute/{orderId}
+```
+Controller: `ts-execute-service/src/main/java/execute/controller/ExecuteControlller.java:30`. No request body;
+`Authorization` header is accepted but not actually used internally.
+
+State machine: `collect` requires status `PAID` or `CHANGE`, sets it to `COLLECTED`. `execute` requires status
+`COLLECTED`, sets it to `USED`. Call them in that order after paying — an order that's been executed is in a
+terminal state (ticket used), not something you'd then cancel.
+
+### 11.11 Enums
+
+**Seat type / class** (`edu.fudan.common.entity.SeatClass`) — used as `seatType` in preserve/rebook:
+
+| code | name |
+|---|---|
+| 0 | NoSeat |
+| 1 | GreenSeat |
+| 2 | **FirstClassSeat** |
+| 3 | **SecondClassSeat** |
+| 4 | HardSeat |
+| 5 | SoftSeat |
+| 6 | HardBed |
+| 7 | SoftBed |
+| 8 | HighSoftSeat |
+
+Only 2 and 3 are meaningfully populated in the seed data for the G/D trips used in testing.
+
+**Order status** (`edu.fudan.common.entity.OrderStatus`) — used as `state` in order/query, and is the value on
+`Order.status` in responses:
+
+| code | name |
+|---|---|
+| 0 | Not Paid |
+| 1 | Paid & Not Collected |
+| 2 | Collected |
+| 3 | Cancel & Rebook (set by a successful `rebook`) |
+| 4 | Cancel |
+| 5 | Refunded |
+| 6 | Used (set by `execute`) |
+
+**Food type** (`foodType` field on the preserve request) — confirmed against `PreserveServiceImpl.preserve()`:
+
+| value | meaning | fields used |
+|---|---|---|
+| 0 | none | (none) |
+| 1 | train delivery | `foodName`, `foodPrice` only — `stationName`/`storeName` are ignored even if sent |
+| 2 | station pickup | `stationName`, `storeName`, `foodName`, `foodPrice` all used |
+
+**Assurance type** (`assurance` field on the preserve request) —
+`ts-assurance-service/src/main/java/assurance/entity/AssuranceType.java` defines exactly one non-zero value:
+
+| value | meaning |
+|---|---|
+| 0 | none |
+| 1 | Traffic Accident Assurance (flat +3.0 price) — the *only* other valid value |
+
+### 11.12 Verified seed data
+
+Most of the app's ~50 microservices and dozens of stations exist, but only a specific subset actually has working
+seeded data behind it for booking flows. These were found by directly probing a live cluster, not by reading the
+seed data and assuming it's internally consistent (see [11.13](#1113-known-bugs-and-quirks) for why that assumption
+fails).
+
+**Seeded accounts** (`ts-auth-service`/`ts-user-service` `InitUser`):
+
+| username | password | notes |
+|---|---|---|
+| `fdse_microservice` | `111111` | userId `4d2a46c7-71cb-4cf1-b5bb-b68406d9da6f`; pre-loaded with a 10000 payment balance in `ts-inside-payment-service` — the only account guaranteed to have funds |
+| `admin` | `222222` | ROLE_ADMIN |
+
+**High-speed (G/D) station pairs confirmed to return trips** from `POST /api/v1/travelservice/trips/left`:
+
+| from | to |
+|---|---|
+| nanjing | shanghai |
+| nanjing | zhenjiang |
+| nanjing | wuxi |
+| nanjing | suzhou |
+| zhenjiang | wuxi |
+| zhenjiang | suzhou |
+| zhenjiang | shanghai |
+| wuxi | suzhou |
+| wuxi | shanghai |
+| suzhou | shanghai |
+| shanghai | suzhou |
+
+(Of ~48 candidate pairs implied by every seeded route's station list in both directions, only these 11 actually
+work.) The `nanjing→shanghai` leg is served by trips `G1234, G1235, G1236, G1237, D1345`.
+
+**Non-high-speed (Z/T/K) pairs confirmed to return trips** from `POST /api/v1/travel2service/trips/left`:
+
+| from | to |
+|---|---|
+| taiyuan | nanjing |
+| nanjing | beijing |
+| shanghai | nanjing |
+| shanghai | taiyuan |
+
+**Transfer plan** confirmed working: `startStation=taiyuan, viaStation=nanjing, endStation=shanghai`.
+
+**Food data** confirmed seeded only for the `nanjing↔shanghai` G/D trips (see [11.6](#116-add-ons-consign-food-assurance)
+for the actual values) — querying food for any other route's trip fails.
+
+### 11.13 Known bugs and quirks
+
+Everything in this section was hit and confirmed while building the load generator and telemetry exporters — not
+theoretical.
+
+- **`trips/left` silently ignores unknown fields.** Sending `startingPlace` instead of `startPlace` returns HTTP
+  200 with an empty `data: []` — no error, indistinguishable from "no trips exist" unless you already know the
+  correct field name.
+- **Station-pair search results depend on trip-to-route consistency that isn't guaranteed by the seed data.** A
+  trip can reference a `routeId` whose station list doesn't actually include the trip's own claimed
+  `startPlace`/`endPlace`, or includes them in the wrong order — either way, `ts-basic-service` legitimately returns
+  `"no travel info available"`, not an error. Direction matters too: `nanjing→shanghai` works, `shanghai→nanjing`
+  does not, because `route.stations.indexOf(start) < route.stations.indexOf(end)` is required. See
+  [11.12](#1112-verified-seed-data) for pairs confirmed to actually work — don't assume a route "logically"
+  connecting two stations means search will return anything.
+- **`preserve`'s response never contains the new order's id.** `PreserveServiceImpl` returns the literal string
+  `"Success"` as `data`, even though the internal `createOrder()` call does return the full order object with its
+  id — that return value is just discarded before the response is built. Always look the order up afterward via
+  `order/query`.
+- **`order/query` throws a raw HTTP 500** (`NullPointerException` in `StringUtils.String2Date`, which calls
+  `.length()` on a null string) if `travelDateEnd`, `boughtDateStart`, or `boughtDateEnd` are omitted — even when
+  you only want the `enableStateQuery`/`state` filter and don't care about date filtering at all. The date-parsing
+  code runs unconditionally once *any* one of the three `enable*Query` flags is true, regardless of which specific
+  sub-filter you asked for. Always send all three, even with dummy wide-open bounds like
+  `"2020-01-01"`/`"2030-01-01"`.
+- **Register responds HTTP 201, not 200.** Easy to miss if you only check for 200 on every endpoint by habit — this
+  is the one exception among everything documented here.
+- **No logout endpoint exists.** Don't build a "sign out" flow expecting one; re-login for a fresh token if you
+  need session-refresh-like behavior.
+- **`rebook`/`execute` and `cancel` are mutually exclusive terminal paths.** Don't chain a `cancel` after a
+  successful `rebook` or `execute` — the order's status by then won't satisfy `cancel`'s precondition.
+
+### 11.14 Full gateway route table
+
+Every path prefix the gateway (`ts-gateway-service/src/main/resources/application.yml`) routes, and the backing
+service. Prefixes not covered in detail above haven't been independently verified this way — use this table to find
+the right controller to read before calling them.
+
+| path prefix | backing service |
+|---|---|
+| `/api/v1/adminbasicservice/**` | ts-admin-basic-info-service |
+| `/api/v1/adminorderservice/**` | ts-admin-order-service |
+| `/api/v1/adminrouteservice/**` | ts-admin-route-service |
+| `/api/v1/admintravelservice/**` | ts-admin-travel-service |
+| `/api/v1/adminuserservice/users/**` | ts-admin-user-service |
+| `/api/v1/assuranceservice/**` | ts-assurance-service |
+| `/api/v1/auth/**`, `/api/v1/users/**` | ts-auth-service |
+| `/api/v1/avatar/**` | ts-avatar-service |
+| `/api/v1/basicservice/**` | ts-basic-service |
+| `/api/v1/cancelservice/**` | ts-cancel-service |
+| `/api/v1/configservice/**` | ts-config-service |
+| `/api/v1/consignpriceservice/**` | ts-consign-price-service |
+| `/api/v1/consignservice/**` | ts-consign-service |
+| `/api/v1/contactservice/**` | ts-contacts-service |
+| `/api/v1/executeservice/**` | ts-execute-service |
+| `/api/v1/foodservice/**` | ts-food-service |
+| `/api/v1/fooddeliveryservice/**` | ts-food-delivery-service |
+| `/api/v1/inside_pay_service/**` | ts-inside-payment-service |
+| `/api/v1/notifyservice/**` | ts-notification-service |
+| `/api/v1/orderOtherService/**` | ts-order-other-service |
+| `/api/v1/orderservice/**` | ts-order-service |
+| `/api/v1/paymentservice/**` | ts-payment-service |
+| `/api/v1/preserveotherservice/**` | ts-preserve-other-service |
+| `/api/v1/preserveservice/**` | ts-preserve-service |
+| `/api/v1/priceservice/**` | ts-price-service |
+| `/api/v1/rebookservice/**` | ts-rebook-service |
+| `/api/v1/routeplanservice/**` | ts-route-plan-service |
+| `/api/v1/routeservice/**` | ts-route-service |
+| `/api/v1/seatservice/**` | ts-seat-service |
+| `/api/v1/securityservice/**` | ts-security-service |
+| `/api/v1/stationfoodservice/**` | ts-station-food-service |
+| `/api/v1/stationservice/**` | ts-station-service |
+| `/api/v1/trainfoodservice/**` | ts-train-food-service |
+| `/api/v1/trainservice/**` | ts-train-service |
+| `/api/v1/travel2service/**` | ts-travel2-service |
+| `/api/v1/travelplanservice/**` | ts-travel-plan-service |
+| `/api/v1/travelservice/**` | ts-travel-service |
+| `/api/v1/userservice/users/**` | ts-user-service |
+| `/api/v1/verifycode/**` | ts-verification-code-service |
+| `/api/v1/waitorderservice/**` | ts-wait-order-service |
+
+Note that a route existing doesn't mean a service is meant to be a client-facing endpoint — `ts-seat-service`,
+`ts-security-service`, and `ts-config-service`, for example, are routed but are really internal dependencies other
+services call (seat allocation, security checks, Nacos config), not something an end user client normally hits
+directly. For any prefix not covered in detail above, read that service's own controller package before calling
+it — this table only tells you where to look, not what the request/response shapes are.
+
+Reference data endpoints, useful while testing any of the above: `GET /api/v1/stationservice/stations` (all
+stations) and `GET /api/v1/routeservice/routes` (all routes, including each one's `stations` list in order — the
+ordering that [11.13](#1113-known-bugs-and-quirks) explains matters for search direction).
 
 ---
 
